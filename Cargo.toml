@@ -1,0 +1,16 @@
+[package]
+name    = "tupi_seguro"
+version = "0.3.0"
+edition = "2021"
+
+[lib]
+name      = "tupi_seguro"
+crate-type = ["staticlib"]
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp"] }
+
+[profile.release]
+opt-level = 3
+lto       = true
+panic     = "abort"
