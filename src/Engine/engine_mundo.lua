@@ -253,17 +253,16 @@ function InstMeta:desenhar(z)
                 local py0_atlas = tl * th
                 local px1_atlas = px0_atlas + tw
                 local py1_atlas = py0_atlas + th
-                local eps = 0.01
-                local u0 = (px0_atlas + eps) / alarg
-                local v0 = (py0_atlas + eps) / aalt
-                local u1 = (px1_atlas - eps) / alarg
-                local v1 = (py1_atlas - eps) / aalt
+                
+                local u0 = px0_atlas / alarg
+                local v0 = py0_atlas / aalt
+                local u1 = px1_atlas / alarg
+                local v1 = py1_atlas / aalt
 
                 q[0]=px0; q[1]=py0; q[2]=u0;  q[3]=v0
                 q[4]=px1; q[5]=py0; q[6]=u1;  q[7]=v0
                 q[8]=px0; q[9]=py1; q[10]=u0; q[11]=v1
                 q[12]=px1;q[13]=py1;q[14]=u1; q[15]=v1
-
                 local z_tile = z_base + (def and def.z or 0)
                 C.tupi_objeto_enviar_batch_raw(tex, q, 1, 1, 1,
                     def and def.alpha or 1.0, z_tile)

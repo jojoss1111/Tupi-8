@@ -908,7 +908,7 @@ local function _injetarGlobais()
     _G.circ=Tupi.circulo;    _G.bcirc=Tupi.bordaCirc
     _G.lin=Tupi.linha;       _G.tri=Tupi.triangulo
     _G.pix=Tupi.pixel;       _G.flush=Tupi.flush
-    _G.cls=Tupi.corFundo;    _G.print=Tupi.escrever
+    _G.cls=Tupi.cls;         _G.print=Tupi.escrever
     _G.rectfill=Tupi.retangulo; _G.rect=Tupi.bordaRet
     _G.circfill=Tupi.circulo
 
@@ -1006,7 +1006,21 @@ end
 
 -- ─── ALIASES NO MÓDULO ───────────────────────────────────────────────────────
 
-Tupi.apresentar=Tupi.atualizar;  Tupi.cls=Tupi.corFundo
+Tupi.apresentar=Tupi.atualizar
+
+-- cls(cor): aceita índice de paleta 0-15, tabela {r,g,b} ou r,g,b separados
+function Tupi.cls(cor, g, b)
+    if type(cor) == "number" and g == nil then
+        local p = Tupi.PALETA[cor]
+        if p then R.corFundo(p[1], p[2], p[3]); return end
+        -- fallback: trata como componente r puro (0-1)
+        R.corFundo(cor, cor, cor)
+    elseif type(cor) == "table" then
+        R.corFundo(cor[1] or 0, cor[2] or 0, cor[3] or 0)
+    else
+        R.corFundo(cor or 0, g or 0, b or 0)
+    end
+end
 Tupi.print=Tupi.escrever;        Tupi.image=Tupi.imagem
 Tupi.object=Tupi.objeto;         Tupi.draw=Tupi.mostrar
 Tupi.draw_sprite=Tupi.desenharSprite; Tupi.move=Tupi.mover
