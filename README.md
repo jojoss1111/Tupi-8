@@ -1,96 +1,190 @@
+<div align="center">
+  <img src="./logo.png" alt="Logo da Tupi Engine" width="180">
+
 # Tupi-8
 
-**Tupi-8** é uma engine brasileira inspirada na ideia de engines compactas e rápidas de usar, feita para unir a velocidade do **C + SDL2 + Vulkan**, a segurança de cálculos em **Rust** e a flexibilidade de scripts com **LuaJIT**.
+```text
+████████╗██╗   ██╗██████╗ ██╗     █████╗ 
+╚══██╔══╝██║   ██║██╔══██╗██║    ██╔══██╗
+   ██║   ██║   ██║██████╔╝██║    ╚█████╔╝
+   ██║   ██║   ██║██╔═══╝ ██║    ██╔══██╗
+   ██║   ╚██████╔╝██║     ██║    ╚█████╔╝
+   ╚═╝    ╚═════╝ ╚═╝     ╚═╝     ╚════╝ 
+```
 
-## Visão geral
+<p>
+  <strong>Engine brasileira focada em performance, segurança e prototipação rápida.</strong>
+</p>
 
-A proposta do projeto é entregar uma base enxuta, prática e rápida de iterar. O foco está em:
-- renderização eficiente com SDL2 + Vulkan;
-- validação e segurança na camada Rust;
-- scripts em LuaJIT para acelerar testes, gameplay e ferramentas;
-- um fluxo de build simples com `make`.
+<p>
+  <img src="https://img.shields.io/badge/status-em%20desenvolvimento-22c55e?style=for-the-badge" alt="Status">
+  <img src="https://img.shields.io/badge/plataformas-Linux%20%7C%20Windows-0f172a?style=for-the-badge" alt="Plataformas">
+  <img src="https://img.shields.io/badge/build-Makefile-f59e0b?style=for-the-badge&logo=gnu" alt="Build">
+</p>
 
-## O que cada linguagem faz
-
-### C + SDL2 + Vulkan
-O núcleo em C cuida da integração com o motor gráfico e com a parte de execução em tempo real. No Makefile atual, o projeto compila uma biblioteca Linux (`libtupi.so`), uma DLL para Windows (`libtupi.dll`) e um binário standalone Linux, todos ligados com SDL2 e Vulkan. Isso deixa a engine perto do hardware, com boa performance e controle fino do pipeline.
-
-### Rust
-Rust entra como a camada de segurança e consistência. No código atual, os módulos Rust fazem validação de parâmetros, carregamento seguro de imagens, gerenciamento de atlas, batching de draw calls e checagens para evitar valores inválidos como `NaN`, `Inf` e limites fora do esperado. Isso reduz bugs difíceis de rastrear e melhora a estabilidade da engine.
-
-### LuaJIT
-LuaJIT é usado para scripting. O `Makefile` atual mostra um alvo de execução que inicia a engine com `main.lua`, o que permite testar lógica, protótipos e gameplay com rapidez sem recompilar a base inteira.
-
-## Como o Makefile funciona
-
-O `Makefile` atual organiza o projeto em alvos claros:
-
-- `menu`: abre um menu interativo de build;
-- `sdl2`: compila a versão Linux em `libtupi.so`;
-- `win`: compila a versão Windows em `libtupi.dll`;
-- `dist-linux`: gera um binário standalone para Linux;
-- `rodar`: compila e executa com LuaJIT;
-- `limpar`: remove artefatos de build;
-- `instalar-deps-linux` e `instalar-deps-win`: exibem/instalam as dependências necessárias.
-
-Ele também:
-- compila o Rust com `cargo build --release`;
-- embute shaders GLSL em headers antes do link;
-- separa objetos de build por plataforma;
-- faz link com SDL2, Vulkan, LuaJIT e a biblioteca Rust `tupi_seguro`.
-
-## Estrutura da pasta `src`
-
-### Arquivos C usados pelo build
-O Makefile atual compila estes arquivos C da pasta `src`:
-
-- `src/Renderer.c` — núcleo do renderizador;
-- `src/Camera/Camera.c` — lógica da câmera;
-- `src/Colisores/Fisica.c` — física e suporte a colisões;
-- `src/Inputs/Inputs.c` — entrada do usuário;
-- `src/Colisores/ColisoesAABB.c` — colisões AABB;
-- `src/Sprites/Sprites.c` — sprites e exibição;
-- `src/Mapas/Mapas.c` — mapas e tiles;
-- `main_bytecode_loader.c` — usado no build `dist-linux`.
-
-### Arquivos Rust em `src`
-Os módulos Rust atuais são:
-
-- `camera.rs` — validação segura de câmera 2D;
-- `colisores.rs` — suporte Rust para colisões/validações;
-- `fisica.rs` — rotinas de física;
-- `lib.rs` — ponto de entrada da crate Rust;
-- `mapas.rs` — validação de mapas, limites e consistência de tiles;
-- `renderizador.rs` — assets, batcher, matemática de render e ordenação por Z;
-- `sprites.rs` — carregamento seguro de imagens, atlas de sprites e batching.
-
-## Por que a engine é rápida
-
-A Tupi-8 foi pensada para ser leve e direta:
-- batching de draw calls para reduzir custo de render;
-- validação antecipada no Rust para evitar trabalho errado na GPU;
-- shaders embutidos no build;
-- organização simples para compilar e testar sem atrito.
-
-## Por que é fácil de aprender e programar
-
-A base do projeto usa uma divisão bem clara:
-- C para o núcleo e integração;
-- Rust para segurança e regras de validação;
-- LuaJIT para scripts e prototipação.
-
-Isso deixa o projeto bom para aprender arquitetura de engine e, ao mesmo tempo, rápido para produzir coisas úteis sem perder controle técnico.
-
-## Projeto brasileiro
-
-A Tupi-8 é uma engine brasileira, feita com identidade própria e foco em desenvolver tecnologia de jogo no nosso idioma e no nosso ecossistema.
+<p>
+  <img src="https://img.shields.io/badge/C-00599C?style=for-the-badge&logo=c&logoColor=white" alt="C">
+  <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/LuaJIT-2C2D72?style=for-the-badge&logo=lua&logoColor=white" alt="LuaJIT">
+  <img src="https://img.shields.io/badge/SDL2-7A4EAB?style=for-the-badge&logo=sdl&logoColor=white" alt="SDL2">
+  <img src="https://img.shields.io/badge/Vulkan-A41E22?style=for-the-badge&logo=vulkan&logoColor=white" alt="Vulkan">
+</p>
+</div>
 
 ---
 
-### Execução rápida
+## Visao geral
+
+**Tupi-8** e uma engine brasileira inspirada em motores compactos, rapidos e faceis de iterar. Ela combina a velocidade do **C + SDL2 + Vulkan**, a confiabilidade de **Rust** e a flexibilidade de scripts com **LuaJIT**.
+
+### O foco da engine
+
+- renderizacao eficiente com SDL2 + Vulkan
+- validacao e seguranca na camada Rust
+- scripts em LuaJIT para testes, gameplay e ferramentas
+- fluxo de build simples com `make`
+
+## Stack da Tupi-8
+
+| Camada | Tecnologia | Funcao |
+| --- | --- | --- |
+| Core | C | Loop principal, integracao de baixo nivel e runtime |
+| Render | SDL2 + Vulkan | Janela, contexto, renderizacao e pipeline grafico |
+| Seguranca | Rust | Validacoes, consistencia de dados e suporte seguro |
+| Script | LuaJIT | Gameplay, prototipos e iteracao rapida |
+| Build | Make + Cargo | Compilacao Linux, Windows e distribuicao |
+
+## O que cada parte faz
+
+### C + SDL2 + Vulkan
+
+O nucleo em C cuida da execucao em tempo real e da integracao com o renderizador. No projeto atual, essa base gera:
+
+- `libtupi.so` para Linux
+- `libtupi.dll` para Windows
+- `tupi_engine` como binario standalone Linux
+
+### Rust
+
+Rust entra como camada de seguranca e consistencia. Ele ajuda em validacoes, carregamento seguro de imagens, atlas de sprites, batching e checagens contra valores invalidos como `NaN`, `Inf` e limites fora do esperado.
+
+### LuaJIT
+
+LuaJIT acelera a prototipacao. O alvo `make rodar` inicia a engine com `main.lua`, o que deixa testes de logica e gameplay muito mais rapidos.
+
+O alvo `make dist-linux` usa uma tecnica de **sledging**: ele compila um runner standalone, empacota `main.lua` + os modulos de `src/Engine/*.lua` e anexa esse payload ao final do executavel. No startup, o runner abre o proprio binario via `/proc/self/exe`, encontra o footer com o offset/tamanho do payload e executa tudo com `luaL_loadbuffer`.
+
+Para um fluxo mais proximo de exportacao de engine, existe tambem `make export-linux OUTDIR=/caminho/desejado`. Esse alvo gera uma pasta com:
+
+- `bin/tupi_engine`
+- `scripts/game.tupack` com todos os scripts Lua em um unico binario
+- `assets/` com os PNGs copiados preservando a estrutura relativa
+- `lib/` com bibliotecas estaticas do core exportadas
+
+Nesse modo, o runner procura automaticamente `../scripts/game.tupack` e usa `../assets` como raiz de assets, o que deixa a pasta exportada portavel entre distros Linux sem depender de layout fixo do projeto.
+
+## Build rapido
 
 ```bash
 make
 ```
 
-Depois escolha uma opção no menu ou rode o alvo desejado diretamente, como `make sdl2`, `make win`, `make dist-linux` ou `make rodar`.
+O menu principal permite:
+
+- compilar para Linux
+- compilar para Windows
+- gerar binario standalone Linux
+- limpar artefatos
+- instalar dependencias Linux
+- instalar dependencias Windows
+
+Tambem da para chamar os alvos direto:
+
+```bash
+make sdl2
+make win
+make dist-linux
+make rodar
+```
+
+## Dependencias
+
+O `Makefile` agora detecta automaticamente diferentes gerenciadores de pacotes no Linux e tambem oferece fluxo para Windows e cross-compile.
+
+### Linux
+
+Suporte atual para:
+
+- `apt`
+- `dnf`
+- `pacman`
+- `zypper`
+- `apk`
+
+Para instalar:
+
+```bash
+make instalar-deps-linux
+```
+
+### Windows
+
+Para instalar a base do ambiente Windows:
+
+```bash
+make instalar-deps-win
+```
+
+## Estrutura principal
+
+### Fontes C usados no build
+
+- `src/Renderizador/Renderer.c`
+- `src/Camera/Camera.c`
+- `src/Colisores/Fisica.c`
+- `src/Inputs/Inputs.c`
+- `src/Colisores/ColisoesAABB.c`
+- `src/Sprites/Sprites.c`
+- `src/Mapas/Mapas.c`
+- `main_bytecode_loader.c`
+
+### Empacotamento standalone
+
+- `src/bin/tupi_pack.rs` cria o payload Lua, tanto para append no executavel quanto para gerar um arquivo externo `.tupack`
+- `main_bytecode_loader.c` le o proprio binario ou um pacote Lua externo e instala um searcher Lua para os modulos embutidos
+- o modo standalone define `TUPI_STANDALONE = true`, entao `engineffi.lua` usa `ffi.C` em vez de tentar abrir `libtupi.so`
+
+### Modulos Rust atuais
+
+- `src/camera.rs`
+- `src/colisores.rs`
+- `src/fisica.rs`
+- `src/lib.rs`
+- `src/mapas.rs`
+- `src/renderizador.rs`
+- `src/sprites.rs`
+
+## Por que a Tupi-8 e rapida
+
+- batching de draw calls para reduzir custo de render
+- validacao antecipada na camada Rust
+- shaders embutidos no build
+- estrutura simples para compilar e iterar sem atrito
+
+## Por que a Tupi-8 e boa para aprender
+
+- separa bem o papel de cada linguagem
+- aproxima o dev de conceitos reais de engine
+- permite prototipar rapido sem perder controle tecnico
+- mantem uma base pequena e facil de estudar
+
+## Identidade do projeto
+
+Tupi-8 e uma engine brasileira, feita com identidade propria e com foco em desenvolver tecnologia de jogos no nosso idioma, no nosso contexto e no nosso ecossistema.
+
+---
+
+<div align="center">
+  <strong>Tupi Engine</strong><br>
+  Performance de baixo nivel com uma alma brasileira.
+</div>
