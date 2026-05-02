@@ -708,6 +708,37 @@ local function _mapaValido(m)
     return type(m)=="table" and type(m._colunas)=="number" and m._colunas > 0
 end
 
+local _mapa_trocas = setmetatable({}, { __mode = "k" })
+local _mapa_fade = nil
+
+local function _resolverMapaTroca(m)
+    if not _mapaValido(m) then return m end
+    local atual = m
+    local limite = 0
+    while _mapa_trocas[atual] and limite < 32 do
+        atual = _mapa_trocas[atual]
+        limite = limite + 1
+    end
+    return atual
+end
+
+local function _mapaComTroca(m, nome)
+    local resolvido = _resolverMapaTroca(m)
+    assert(_mapaValido(resolvido),
+        string.format("[%s] primeiro argumento deve ser um mapa criado com mapc()", nome))
+    return resolvido
+end
+
+local function _atualizarFadeMapa()
+    if not _mapa_fade then return end
+    _mapa_fade:atualizar(J.dt())
+end
+
+local function _desenharFadeMapa()
+    if not _mapa_fade then return end
+    _mapa_fade:desenhar()
+end
+
 -- converte string de números em array flat (ex: "1 2 -1 3")
 local function _mapa_parse(s)
     local arr = {}
@@ -734,7 +765,7 @@ end
 -- Tile 0 = vazio; tile >= 1 = id no tileset
 -- IMPORTANTE: chame mflag() ANTES de mapa() para evitar recompilação desnecessária
 function Tupi.mapa(m, dados)
-    assert(_mapaValido(m), "[mapa] primeiro argumento deve ser um mapa criado com mapc()")
+    m = _mapaComTroca(m, "mapa")
     local arr
     if type(dados)=="string" then
         arr = _mapa_parse(dados)
@@ -755,8 +786,7 @@ end
 -- Chame ANTES de mapa() — engine_mundo só armazena a flag sem recompilar
 -- Se chamar depois de mapa(), recompila automaticamente via build()
 function Tupi.mflag(m, tile_id, opts)
-    assert(_mapaValido(m),
-        "[mflag] primeiro argumento deve ser um mapa criado com mapc()")
+    m = _mapaComTroca(m, "mflag")
     assert(type(tile_id)=="number" and tile_id>=1,
         "[mflag] tile_id deve ser número >= 1 (tile 0 é vazio e não aceita flags), recebido: "..tostring(tile_id))
     assert(opts==nil or type(opts)=="table",
@@ -767,32 +797,34 @@ end
 
 -- define animação de um tile: mframes(m, tile_id, frames, fps [, loop])
 function Tupi.mframes(m, tile_id, frames, fps, loop)
-    assert(_mapaValido(m), "[mframes] mapa inválido")
+    m = _mapaComTroca(m, "mframes")
     m:frames(tile_id, frames, fps, loop)
     if m._valido then m:build() end
 end
 
 -- mapd(m [, z]) — desenha o mapa (z = z-index base, padrão 0)
 function Tupi.mapd(m, z)
-    assert(_mapaValido(m), "[mapd] primeiro argumento deve ser um mapa criado com mapc()")
+    if type(m)=="number" and z==nil then z=m; m=nil end
+    m = _mapaComTroca(m, "mapd")
     m:desenhar(z or 0)
 end
 
 -- mapu(m [, dt]) — atualiza animações do mapa (chamar em _rodar/_update)
 function Tupi.mapu(m, dt)
-    assert(_mapaValido(m), "[mapu] primeiro argumento deve ser um mapa criado com mapc()")
+    if type(m)=="number" and dt==nil then dt=m; m=nil end
+    m = _mapaComTroca(m, "mapu")
     m:atualizar(dt or J.dt())
 end
 
 -- mget(m, col, lin) → tile_id numérico (0 = vazio ou fora dos limites)
 function Tupi.mget(m, col, lin)
-    assert(_mapaValido(m), "[mget] mapa inválido")
+    m = _mapaComTroca(m, "mget")
     return m:tileIdEmGrade(col, lin)
 end
 
 -- mset(m, col, lin, tile_id) — altera célula em runtime e recompila
 function Tupi.mset(m, col, lin, tid)
-    assert(_mapaValido(m), "[mset] mapa inválido")
+    m = _mapaComTroca(m, "mset")
     if col<0 or col>=m._colunas or lin<0 or lin>=m._linhas then return end
     m._array[lin * m._colunas + col + 1] = tid or 0
     m:build()
@@ -800,7 +832,7 @@ end
 
 -- msolido(m, px, py) → bool — tile sob o ponto (em pixels) é sólido?
 function Tupi.msolido(m, px, py)
-    assert(_mapaValido(m), "[msolido] mapa inválido")
+    m = _mapaComTroca(m, "msolido")
     local col = math.floor(px / m._larg_tile)
     local lin = math.floor(py / m._alt_tile)
     return m:isSolido(col, lin)
@@ -808,7 +840,7 @@ end
 
 -- mtrigger(m, px, py) → bool — tile sob o ponto (em pixels) é trigger?
 function Tupi.mtrigger(m, px, py)
-    assert(_mapaValido(m), "[mtrigger] mapa inválido")
+    m = _mapaComTroca(m, "mtrigger")
     local col = math.floor(px / m._larg_tile)
     local lin = math.floor(py / m._alt_tile)
     return m:isTrigger(col, lin)
@@ -816,7 +848,7 @@ end
 
 -- mcel(m, col, lin) → {id, solido, trigger, passagem, flags}
 function Tupi.mcel(m, c, l)
-    assert(_mapaValido(m), "[mcel] mapa inválido")
+    m = _mapaComTroca(m, "mcel")
     local tid = m:tileIdEmGrade(c, l)
     local hb  = m._valido and m:hitboxTile(c, l) or nil
     return {
@@ -828,11 +860,41 @@ function Tupi.mcel(m, c, l)
     }
 end
 
-function Tupi.mhitbox(m, c, l)        return m:hitboxTile(c, l)           end
-function Tupi.mdef(m, c, l)           return m:definicaoEmGrade(c, l)     end
-function Tupi.mdefPonto(m, px, py)    return m:definicaoEmPonto(px, py)   end
-function Tupi.mtileEmPonto(m, px, py) return m:tileEmPonto(px, py)        end
-function Tupi.mdestruir(m)            assert(_mapaValido(m), "[mdestruir] mapa inválido"); m:destruir() end
+function Tupi.mhitbox(m, c, l)        return _mapaComTroca(m, "mhitbox"):hitboxTile(c, l)       end
+function Tupi.mdef(m, c, l)           return _mapaComTroca(m, "mdef"):definicaoEmGrade(c, l)    end
+function Tupi.mdefPonto(m, px, py)    return _mapaComTroca(m, "mdefPonto"):definicaoEmPonto(px, py) end
+function Tupi.mtileEmPonto(m, px, py) return _mapaComTroca(m, "mtileEmPonto"):tileEmPonto(px, py) end
+function Tupi.mdestruir(m)
+    m = _mapaComTroca(m, "mdestruir")
+    _mapa_trocas[m] = nil
+    m:destruir()
+end
+
+-- mapt(mapa_inicial, mapa_trocado, fade_cor, fade_tempo)
+-- agenda a troca visualmente com fade e redireciona os wrappers de mapa
+-- para o mapa novo quando o fade atingir o pico.
+function Tupi.mapt(mapa_inicial, mapa_trocado, fade_cor, fade_tempo)
+    local origem  = _mapaComTroca(mapa_inicial, "mapt")
+    local destino = _mapaComTroca(mapa_trocado, "mapt")
+    if origem == destino then return destino end
+
+    if not _mapa_fade then
+        _mapa_fade = Visual.fade.novo(Tupi, Tupi.largura(), Tupi.altura(), fade_tempo or 0.2)
+    end
+    if not _mapa_fade:livre() then
+        return origem
+    end
+
+    _mapa_fade.largura = Tupi.largura()
+    _mapa_fade.altura  = Tupi.altura()
+    if _mapa_fade.setCor then _mapa_fade:setCor(fade_cor) end
+    _mapa_fade:iniciar(function()
+        _mapa_trocas[mapa_inicial] = destino
+        _mapa_trocas[origem] = destino
+    end, fade_tempo or 0.2)
+
+    return origem
+end
 
 -- Aliases em inglês (estilo PICO-8)
 Tupi.map_create  = Tupi.mapc
@@ -845,6 +907,7 @@ Tupi.map_trigger = Tupi.mtrigger
 Tupi.map_cell    = Tupi.mcel
 Tupi.map_get     = Tupi.mget
 Tupi.map_set     = Tupi.mset
+Tupi.map_transition = Tupi.mapt
 
 -- ─── MUNDOS ──────────────────────────────────────────────────────────────────
 
@@ -950,7 +1013,7 @@ local function _injetarGlobais()
     _G.mframes=Tupi.mframes; _G.mapd=Tupi.mapd; _G.mapu=Tupi.mapu
     _G.mget=Tupi.mget;  _G.mset=Tupi.mset;   _G.mcel=Tupi.mcel
     _G.msolido=Tupi.msolido; _G.mtrigger=Tupi.mtrigger
-    _G.mhitbox=Tupi.mhitbox
+    _G.mhitbox=Tupi.mhitbox; _G.mapt=Tupi.mapt
 
     -- matemática curta
     _G.rnd=Tupi.rnd;    _G.lerp=Tupi.lerp;   _G.dist=Tupi.distancia
@@ -997,7 +1060,9 @@ function Tupi.rodar()
         J.limpar()
         _kb.frameNum=_kb.frameNum+1
         if type(_G._rodar)=="function"    then _G._rodar()    end
+        _atualizarFadeMapa()
         if type(_G._desenhar)=="function" then _G._desenhar() end
+        _desenharFadeMapa()
         R.batchDesenhar()
         J.atualizar()
     end

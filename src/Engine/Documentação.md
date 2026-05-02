@@ -396,6 +396,7 @@ Tupi.atualizarCorpo(corpo, 500)
 | `Tupi.mdef(m, c, l)` | Definição da grade |
 | `Tupi.mdefPonto(m, px, py)` | Definição por ponto |
 | `Tupi.mtileEmPonto(m, px, py)` | ID do tile no ponto |
+| `Tupi.mapt(mapa_inicial, mapa_trocado, fade_cor, fade_tempo)` | Troca mapa com fade |
 | `Tupi.mdestruir(m)` | Destrói mapa |
 
 ### Exemplo básico
@@ -420,6 +421,7 @@ Tupi.mapd(mapa, 0)
 | `Tupi.map_cell` | `Tupi.mcel` |
 | `Tupi.map_get` | `Tupi.mget` |
 | `Tupi.map_set` | `Tupi.mset` |
+| `Tupi.map_transition` | `Tupi.mapt` |
 
 ## 14) Mundos
 
