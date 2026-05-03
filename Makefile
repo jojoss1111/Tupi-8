@@ -119,13 +119,24 @@ LOADER_SRC     = main_bytecode_loader.c
 DIST_BIN_LINUX = tupi_engine
 PACKER_BIN     = ./target/release/tupi_pack
 LUA_MODULE_SRCS = $(sort $(wildcard src/Engine/*.lua))
-LUA_ARCHIVE_NAME = game.tupack
-PNG_ASSETS = $(shell find . -type f -name '*.png' -not -path './target/*' -not -path './.build/*' | sort)
+LUA_ARCHIVE_NAME = game.tuzip
+ALL_ASSETS = $(shell find . -type f \( \
+    -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.bmp' \
+    -o -name '*.gif' -o -name '*.webp' \
+    -o -name '*.wav' -o -name '*.ogg' -o -name '*.mp3' -o -name '*.flac' \
+    -o -name '*.ttf' -o -name '*.otf' \
+    -o -name '*.json' -o -name '*.csv' -o -name '*.tmx' -o -name '*.tsx' \
+    \) \
+    -not -path './target/*' \
+    -not -path './.build/*' \
+    -not -path './.engine/*' \
+    | sort)
+
+ALL_ASSETS_DIR ?= assets
 
 EXPORT_BIN_DIR    = $(OUTDIR)/bin
 EXPORT_SCRIPT_DIR = $(OUTDIR)/scripts
 EXPORT_ASSET_DIR  = $(OUTDIR)/assets
-# lib/ é onde ficam as .so bundladas para portabilidade entre distros
 EXPORT_LIB_DIR    = $(OUTDIR)/lib
 
 DIST_SRCS = $(LOADER_SRC) $(SRCS)
@@ -156,40 +167,46 @@ DIST_CFLAGS = -O2 -Wall \
               $(COMMON_INCLUDES) \
               $(LUAJIT_CFLAGS) \
               $(SDL2_CFLAGS_PKG) \
-              $(VULKAN_CFLAGS_PKG)
+              $(VULKAN_CFLAGS_PKG) \
+              $(shell pkg-config --cflags libzip)
 
-# -Wl,-rpath,'$$ORIGIN/../lib' faz o binário procurar .so em lib/ relativo a si mesmo.
-# Isso garante portabilidade: o export carrega as libs bundladas, não as do sistema.
+# Flags para dist-linux (opção 3) e bundle-linux (opção 4):
+# Ambos usam o mesmo binário — a diferença é o conteúdo do ZIP anexado.
+# -Wl,-E exporta todos os símbolos (necessário para plugins Lua via dlopen).
+# NÃO usamos rpath aqui: no modo bundle as libs chegam via LD_LIBRARY_PATH
+# setado pelo próprio executável antes de se re-executar.
 DIST_LIBS = -L$(RUST_LIB_PATH) \
             -ltupi_seguro \
             $(LUAJIT_LIBS) \
             $(SDL2_LIBS_PKG) \
             $(VULKAN_LIBS_PKG) \
+            $(shell pkg-config --libs libzip) \
             -lm -ldl -lpthread \
             -Wl,-E
 
-# Flags de link para o export portável: embutir rpath apontando para lib/ bundlada
+# Flags para export-linux (opção 5): rpath aponta para lib/ bundlada na pasta.
 DIST_LIBS_EXPORT = -L$(RUST_LIB_PATH) \
                    -ltupi_seguro \
                    $(LUAJIT_LIBS) \
                    $(SDL2_LIBS_PKG) \
                    $(VULKAN_LIBS_PKG) \
+                   $(shell pkg-config --libs libzip) \
                    -lm -ldl -lpthread \
                    -Wl,-E \
                    -Wl,-rpath,'$$ORIGIN/../lib'
 
-LINUX_DEPS_APT = build-essential libsdl2-dev libvulkan-dev libshaderc-dev luajit libluajit-5.1-dev pkg-config curl rustc cargo
-LINUX_DEPS_DNF = gcc gcc-c++ make SDL2-devel vulkan-loader-devel shaderc-devel luajit luajit-devel pkgconf-pkg-config rust cargo curl
-LINUX_DEPS_PACMAN = base-devel sdl2 vulkan-icd-loader shaderc luajit rust pkgconf curl
-LINUX_DEPS_ZYPPER = gcc gcc-c++ make SDL2-devel vulkan-loader-devel shaderc-devel luajit-devel pkg-config rust cargo curl
-LINUX_DEPS_APK = build-base sdl2-dev vulkan-loader-dev shaderc-dev luajit luajit-dev pkgconf rust cargo curl
+LINUX_DEPS_APT = build-essential libsdl2-dev libvulkan-dev libshaderc-dev luajit libluajit-5.1-dev libzip-dev pkg-config curl rustc cargo
+LINUX_DEPS_DNF = gcc gcc-c++ make SDL2-devel vulkan-loader-devel shaderc-devel luajit luajit-devel libzip-devel pkgconf-pkg-config rust cargo curl
+LINUX_DEPS_PACMAN = base-devel sdl2 vulkan-icd-loader shaderc luajit libzip rust pkgconf curl
+LINUX_DEPS_ZYPPER = gcc gcc-c++ make SDL2-devel vulkan-loader-devel shaderc-devel luajit-devel libzip-devel pkg-config rust cargo curl
+LINUX_DEPS_APK = build-base sdl2-dev vulkan-loader-dev shaderc-dev luajit luajit-dev libzip-dev pkgconf rust cargo curl
 
 WIN_CROSS_DEPS_APT = mingw-w64 gcc-mingw-w64-x86-64
 WIN_CROSS_DEPS_DNF = mingw64-gcc
 WIN_CROSS_DEPS_PACMAN = mingw-w64-gcc
 WIN_CROSS_DEPS_ZYPPER = cross-x86_64-w64-mingw32-gcc
 
-.PHONY: all menu sdl2 win dist-linux export-linux rodar compilar_rust compilar_rust_win compilar_packer shaders \
+.PHONY: all menu sdl2 win dist-linux bundle-linux export-linux rodar compilar_rust compilar_rust_win compilar_packer shaders \
         limpar instalar-deps-linux instalar-deps-win ajuda \
         _build_sdl2 _build_win _clean _deps_linux _deps_win
 
@@ -206,10 +223,11 @@ menu:
 	@printf "  $(GREEN)$(BOLD)[1]$(RESET) Compilar Linux      $(DIM)(libtupi.so - SDL2)$(RESET)\n"
 	@printf "  $(CYAN)$(BOLD)[2]$(RESET) Compilar Windows    $(DIM)(libtupi.dll - SDL2 cross-compile)$(RESET)\n"
 	@printf "  $(YELLOW)$(BOLD)[3]$(RESET) Standalone Linux  $(DIM)(binario com Lua embutido)$(RESET)\n"
-	@printf "  $(YELLOW)$(BOLD)[4]$(RESET) Export Linux      $(DIM)(pasta portatil - roda em qualquer distro)$(RESET)\n"
-	@printf "  $(RED)$(BOLD)[5]$(RESET) Limpar artefatos\n"
-	@printf "  $(YELLOW)$(BOLD)[6]$(RESET) Dependencias Linux\n"
-	@printf "  $(YELLOW)$(BOLD)[7]$(RESET) Dependencias Windows\n"
+	@printf "  $(YELLOW)$(BOLD)[4]$(RESET) Bundle Linux      $(DIM)(UM executavel: ZIP-append, como Godot/Love2d)$(RESET)\n"
+	@printf "  $(YELLOW)$(BOLD)[5]$(RESET) Export Linux      $(DIM)(pasta portatil - roda em qualquer distro)$(RESET)\n"
+	@printf "  $(RED)$(BOLD)[6]$(RESET) Limpar artefatos\n"
+	@printf "  $(YELLOW)$(BOLD)[7]$(RESET) Dependencias Linux\n"
+	@printf "  $(YELLOW)$(BOLD)[8]$(RESET) Dependencias Windows\n"
 	@printf "\n$(DIM)  ----------------------------------------------------$(RESET)\n\n"
 	@printf "  > Digite o numero e pressione Enter: " && \
 	read OPCAO; \
@@ -218,6 +236,17 @@ menu:
 		2) $(MAKE) _build_win ;; \
 		3) $(MAKE) dist-linux ;; \
 		4) \
+			printf "\n$(CYAN)$(BOLD)  Bundle Linux$(RESET)\n\n"; \
+			printf "  Nome do executavel final $(DIM)(Enter = MeuJogo)$(RESET): "; \
+			read GAME_NAME; \
+			[ -z "$$GAME_NAME" ] && GAME_NAME="MeuJogo"; \
+			printf "  Diretorio de destino $(DIM)(Enter = ~/Desktop)$(RESET): "; \
+			read GAME_DIR; \
+			[ -z "$$GAME_DIR" ] && GAME_DIR="$$HOME/Desktop"; \
+			GAME_DIR=$$(eval echo "$$GAME_DIR"); \
+			printf "\n$(DIM)  Gerando bundle em: $$GAME_DIR/$$GAME_NAME$(RESET)\n\n"; \
+			$(MAKE) bundle-linux GAME_NAME="$$GAME_NAME" OUTDIR="$$GAME_DIR" ;; \
+		5) \
 			printf "\n$(CYAN)$(BOLD)  Export Linux$(RESET)\n\n"; \
 			printf "  Nome do jogo $(DIM)(nome da pasta de saida)$(RESET): "; \
 			read GAME_NAME; \
@@ -232,9 +261,9 @@ menu:
 				printf "\n$(DIM)  Exportando para: $$FINAL_DIR$(RESET)\n\n"; \
 				$(MAKE) export-linux OUTDIR="$$FINAL_DIR" GAME_NAME="$$GAME_NAME"; \
 			fi ;; \
-		5) $(MAKE) _clean ;; \
-		6) $(MAKE) _deps_linux ;; \
-		7) $(MAKE) _deps_win ;; \
+		6) $(MAKE) _clean ;; \
+		7) $(MAKE) _deps_linux ;; \
+		8) $(MAKE) _deps_win ;; \
 		*) printf "$(RED)Opcao invalida.$(RESET)\n" ;; \
 	esac
 
@@ -279,64 +308,107 @@ $(OBJ_DIR_WIN)/%.o: %.c
 
 $(OBJ_DIR_WIN)/src/Renderizador/Renderer.o: $(SHADERS_EMBED)
 
+# ---------------------------------------------------------------------------
+# dist-linux (opção 3) — executável com scripts Lua embutidos, sem libs.
+# Requer SDL2/Vulkan/LuaJIT instalados no sistema do usuário final.
+# ---------------------------------------------------------------------------
 dist-linux: compilar_rust compilar_packer shaders $(DIST_OBJS) main.lua $(LUA_MODULE_SRCS)
 	@printf "\n$(CYAN)$(BOLD)  Linkando binario standalone...$(RESET)\n"
 	@$(CC) -o $(DIST_BIN_LINUX) $(DIST_OBJS) $(DIST_LIBS) \
 		&& printf "$(GREEN)+  Link OK.$(RESET)\n" \
 		|| { printf "$(RED)x  Falha no link standalone.$(RESET)\n\n"; exit 1; }
-	@printf "$(CYAN)>  Anexando payload Lua ao executavel...$(RESET)\n"
+	@printf "$(CYAN)>  Anexando scripts Lua ao executavel...$(RESET)\n"
 	@$(PACKER_BIN) append $(DIST_BIN_LINUX) main.lua $(LUA_MODULE_SRCS) \
 		&& printf "$(GREEN)+  Pronto: $(BOLD)$(DIST_BIN_LINUX)$(RESET)$(GREEN) com Lua embutido.$(RESET)\n\n" \
-		|| { printf "$(RED)x  Falha ao anexar payload Lua ao executavel.$(RESET)\n\n"; exit 1; }
+		|| { printf "$(RED)x  Falha ao anexar scripts ao executavel.$(RESET)\n\n"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# export-linux — gera pasta portável que roda em qualquer distro Linux x86_64
+# bundle-linux (opção 4) — UM único arquivo executável portátil.
 #
-# Estratégia de portabilidade:
-#   1. O binário é linkado com -Wl,-rpath,'$$ORIGIN/../lib'
-#      → o dynamic linker procura primeiro em <pasta_do_binario>/../lib/
-#   2. As .so de SDL2, LuaJIT e Vulkan (loader) são copiadas para lib/
-#      → ldd resolve as dependências transitivas e as copia também
-#   3. Um launcher shell (bin/tupi_engine.sh) define LD_LIBRARY_PATH
-#      como fallback extra e invoca o binário real
+# Técnica ZIP-append (idêntica à Godot e Love2d):
+#   ELF + ZIP[ __main__, scripts/*, lib/*.so, assets/* ] + TRAILER
 #
-# Estrutura do export:
-#   dist/linux-export/
-#     bin/
-#       tupi_engine        ← binário ELF com rpath embutido
-#       tupi_engine.sh     ← launcher shell (ponto de entrada para o usuário)
-#     lib/
-#       libSDL2-2.0.so.0   ← SDL2 bundlada
-#       libluajit-5.1.so.2 ← LuaJIT bundlada
-#       libvulkan.so.1     ← Vulkan loader bundlado
-#       ... (dependências transitivas via ldd)
-#     scripts/
-#       game.tupack        ← scripts Lua compactados
-#     assets/
-#       *.png ...
+# O próprio main_bytecode_loader.c detecta o prefixo "lib/" no ZIP e,
+# na primeira execução, extrai as .so para /tmp/tupi_<hash>/, seta
+# LD_LIBRARY_PATH e se re-executa via execv(). Na segunda passagem
+# (TUPI_LIBS_EXTRACTED=1) roda normalmente.
+#
+# Não há bootstrapper separado — o executável é self-contained.
+#
+# Uso:
+#   make bundle-linux GAME_NAME=MeuJogo OUTDIR=~/Desktop
+# ---------------------------------------------------------------------------
+bundle-linux: compilar_rust compilar_packer shaders $(DIST_OBJS) main.lua $(LUA_MODULE_SRCS)
+	@printf "\n$(CYAN)$(BOLD)  [Bundle] Gerando executavel unico (ZIP-append)...$(RESET)\n"
+	@mkdir -p "$(OUTDIR)" .build/bundle_libs
+
+	@# --- 1. Linka o executável final (SDL2 linkado dinamicamente) ---
+	@printf "$(CYAN)>  Linkando executavel bundle...$(RESET)\n"
+	@$(CC) -o "$(OUTDIR)/$(GAME_NAME)" $(DIST_OBJS) $(DIST_LIBS) \
+		&& printf "$(GREEN)+  Link OK.$(RESET)\n" \
+		|| { printf "$(RED)x  Falha no link bundle.$(RESET)\n\n"; exit 1; }
+
+	@# --- 2. Coleta as .so que o executável precisa ---
+	@printf "$(CYAN)>  Coletando bibliotecas dinamicas...$(RESET)\n"
+	@rm -rf .build/bundle_libs && mkdir -p .build/bundle_libs
+	@ldd "$(OUTDIR)/$(GAME_NAME)" 2>/dev/null | \
+		awk '/=>/ { print $$3 }' | grep -v '^$$' | \
+		grep -Ev '/(libc|libm|libdl|libpthread|libgcc_s|libstdc\+\+|ld-linux)[^/]*\.so' | \
+		while read SO; do \
+			[ -f "$$SO" ] || continue; \
+			SONAME=$$(basename "$$SO"); \
+			cp -L "$$SO" ".build/bundle_libs/$$SONAME" 2>/dev/null && \
+				printf "$(DIM)   bundled: $$SONAME$(RESET)\n" || true; \
+		done
+	@printf "$(GREEN)+  Libs coletadas.$(RESET)\n"
+
+	@# --- 3. Coleta assets (automático: todos os formatos, sem diretório temporário) ---
+	@printf "$(CYAN)>  Coletando assets...$(RESET)\n"
+	@ASSET_LIST="$(ALL_ASSETS)"; \
+	if [ -n "$$ASSET_LIST" ]; then \
+		for f in $$ASSET_LIST; do printf "$(DIM)   incluido: $${f#./}$(RESET)\n"; done; \
+		printf "$(GREEN)+  $$(echo $$ASSET_LIST | wc -w) asset(s) encontrado(s).$(RESET)\n"; \
+	else \
+		printf "$(YELLOW)!  Nenhum asset encontrado.$(RESET)\n"; \
+	fi
+
+	@# --- 4. Empacota: ELF + ZIP[ __main__, scripts/*, lib/*.so, assets/* ] ---
+	@# Assets passados com path relativo ao projeto → packer normaliza para assets/<rel>.
+	@# Resultado: assets/ascii.png, assets/tilesets/grama.png, etc.
+	@printf "$(CYAN)>  Empacotando scripts + libs + assets no executavel...$(RESET)\n"
+	@LIB_COUNT=$$(find .build/bundle_libs -name '*.so*' -type f 2>/dev/null | wc -l); \
+	CMD="$(PACKER_BIN) append \"$(OUTDIR)/$(GAME_NAME)\" main.lua $(LUA_MODULE_SRCS)"; \
+	[ "$$LIB_COUNT" -gt 0 ] && CMD="$$CMD --libs .build/bundle_libs"; \
+	[ -n "$(ALL_ASSETS)" ]   && CMD="$$CMD --assets $(ALL_ASSETS)"; \
+	eval $$CMD \
+		&& printf "$(GREEN)+  ZIP anexado ao executavel OK.$(RESET)\n" \
+		|| { printf "$(RED)x  Falha ao anexar ZIP.$(RESET)\n\n"; exit 1; }
+
+	@chmod +x "$(OUTDIR)/$(GAME_NAME)"
+	@printf "\n$(GREEN)$(BOLD)+  '$(GAME_NAME)' pronto em: $(OUTDIR)/$(GAME_NAME)$(RESET)\n"
+	@printf "$(DIM)   Arquivo unico — copie para onde quiser e execute.\n"
+	@printf "   Na primeira execucao extrai libs em /tmp/tupi_<hash>/ e reinicia.\n"
+	@printf "   Execucoes seguintes iniciam diretamente (tmpdir reutilizado).$(RESET)\n\n"
+
+# ---------------------------------------------------------------------------
+# export-linux (opção 5) — pasta portátil que roda em qualquer distro x86_64
 # ---------------------------------------------------------------------------
 export-linux: compilar_rust compilar_packer shaders $(DIST_OBJS) $(DIST_STATIC_LIB) main.lua $(LUA_MODULE_SRCS)
 	@printf "\n$(CYAN)$(BOLD)  Exportando '$(GAME_NAME)' para $(OUTDIR)...$(RESET)\n"
 	@mkdir -p "$(EXPORT_BIN_DIR)" "$(EXPORT_SCRIPT_DIR)" "$(EXPORT_ASSET_DIR)" "$(EXPORT_LIB_DIR)"
 
-	@# --- 1. Linkar binário com rpath apontando para lib/ bundlada ---
 	@printf "$(CYAN)>  Linkando runner com rpath portatil...$(RESET)\n"
 	@$(CC) -o "$(EXPORT_BIN_DIR)/$(DIST_BIN_LINUX)" $(DIST_OBJS) $(DIST_LIBS_EXPORT) \
 		&& printf "$(GREEN)+  Runner exportado.$(RESET)\n" \
 		|| { printf "$(RED)x  Falha ao linkar runner do export Linux.$(RESET)\n\n"; exit 1; }
 
-	@# --- 2. Empacotar scripts Lua ---
 	@$(PACKER_BIN) archive "$(EXPORT_SCRIPT_DIR)/$(LUA_ARCHIVE_NAME)" main.lua $(LUA_MODULE_SRCS) \
 		&& printf "$(GREEN)+  Scripts Lua compactados em $(EXPORT_SCRIPT_DIR)/$(LUA_ARCHIVE_NAME).$(RESET)\n" \
-		|| { printf "$(RED)x  Falha ao gerar binario de scripts Lua.$(RESET)\n\n"; exit 1; }
+		|| { printf "$(RED)x  Falha ao gerar arquivo ZIP de scripts Lua.$(RESET)\n\n"; exit 1; }
 
-	@# --- 3. Copiar libs estáticas de referência para o export ---
 	@cp "$(DIST_STATIC_LIB)" "$(EXPORT_LIB_DIR)/libtupi_engine_core.a"
 	@cp "$(RUST_LIB_PATH)/libtupi_seguro.a" "$(EXPORT_LIB_DIR)/libtupi_seguro.a"
 
-	@# --- 4. Bundlar .so dinâmicas: SDL2, LuaJIT, Vulkan loader + dependências transitivas ---
-	@# ldd lista todas as .so que o binário precisa; filtramos as do sistema que variam entre distros.
-	@# Excluímos apenas: libc, libm, libdl, libpthread, libgcc_s, ld-linux (ABI estável em todo Linux).
 	@printf "$(CYAN)>  Copiando bibliotecas dinamicas para lib/ ...$(RESET)\n"
 	@ldd "$(EXPORT_BIN_DIR)/$(DIST_BIN_LINUX)" 2>/dev/null | \
 		awk '/=>/ { print $$3 }' | \
@@ -350,13 +422,10 @@ export-linux: compilar_rust compilar_packer shaders $(DIST_OBJS) $(DIST_STATIC_L
 		done
 	@printf "$(GREEN)+  Bibliotecas bundladas em $(EXPORT_LIB_DIR).$(RESET)\n"
 
-	@# --- 5. Gerar launcher shell como ponto de entrada do usuário ---
-	@# O launcher garante LD_LIBRARY_PATH como fallback e muda para o dir do jogo.
 	@printf "$(CYAN)>  Gerando launcher shell...$(RESET)\n"
 	@{ \
 		printf '#!/bin/sh\n'; \
 		printf '# Launcher gerado pelo TupiEngine - nao edite manualmente.\n'; \
-		printf '# Garante que as libs bundladas em lib/ sejam encontradas em qualquer distro Linux.\n'; \
 		printf 'SCRIPT_DIR="$$(cd "$$(dirname "$$0")" && pwd)"\n'; \
 		printf 'export LD_LIBRARY_PATH="$$SCRIPT_DIR/../lib:$$LD_LIBRARY_PATH"\n'; \
 		printf 'export TUPI_ASSET_DIR="$$SCRIPT_DIR/../assets"\n'; \
@@ -366,14 +435,13 @@ export-linux: compilar_rust compilar_packer shaders $(DIST_OBJS) $(DIST_STATIC_L
 	@chmod +x "$(EXPORT_BIN_DIR)/$(DIST_BIN_LINUX).sh"
 	@printf "$(GREEN)+  Launcher: bin/$(DIST_BIN_LINUX).sh$(RESET)\n"
 
-	@# --- 6. Copiar assets PNG ---
-	@for asset in $(PNG_ASSETS); do \
+	@for asset in $(ALL_ASSETS); do \
 		rel=$${asset#./}; \
 		dest="$(EXPORT_ASSET_DIR)/$$rel"; \
 		mkdir -p "$$(dirname "$$dest")"; \
 		cp "$$asset" "$$dest"; \
 	done
-	@printf "$(GREEN)+  Assets PNG copiados para $(EXPORT_ASSET_DIR).$(RESET)\n"
+	@printf "$(GREEN)+  Assets copiados para $(EXPORT_ASSET_DIR).$(RESET)\n"
 
 	@printf "\n$(GREEN)$(BOLD)+  '$(GAME_NAME)' exportado com sucesso!$(RESET)\n"
 	@printf "$(DIM)   Destino: $(OUTDIR)$(RESET)\n"
@@ -401,7 +469,7 @@ compilar_rust:
 		|| { printf "$(RED)x  Falha no build Rust.$(RESET)\n"; exit 1; }
 
 compilar_packer:
-	@printf "$(CYAN)>  Compilando packer de sledging...$(RESET)\n"
+	@printf "$(CYAN)>  Compilando packer...$(RESET)\n"
 	@cd $(RUST_DIR) && $(CARGO) build --release --bin tupi_pack \
 		&& printf "$(GREEN)+  Packer OK.$(RESET)\n" \
 		|| { printf "$(RED)x  Falha no build do packer.$(RESET)\n"; exit 1; }
@@ -419,8 +487,43 @@ rodar: sdl2
 limpar:
 	@printf "\n$(RED)  Limpando artefatos...$(RESET)\n"
 	@rm -rf .build dist $(SDL2_LIB) $(WIN_LIB) $(DIST_BIN_LINUX) $(SHADERS_SPV) $(SHADERS_EMBED)
+	@rm -rf .build/bundle_libs
 	@cd $(RUST_DIR) && $(CARGO) clean
 	@printf "$(GREEN)+  Tudo limpo.$(RESET)\n\n"
+
+ajuda:
+	@printf "\n$(CYAN)$(BOLD)  TupiEngine - comandos disponiveis:$(RESET)\n\n"
+	@printf "  $(GREEN)make$(RESET)                  Menu interativo\n"
+	@printf "  $(GREEN)make sdl2$(RESET)             Compila $(SDL2_LIB) (Linux)\n"
+	@printf "  $(CYAN)make win$(RESET)               Compila $(WIN_LIB) (Windows)\n"
+	@printf "  $(GREEN)make rodar$(RESET)            Compila e executa no Linux\n"
+	@printf "  $(YELLOW)make dist-linux$(RESET)      Binario standalone Linux (sem libs bundladas)\n"
+	@printf "  $(YELLOW)make bundle-linux$(RESET)    Arquivo unico portatil (ZIP-append, como Godot)\n"
+	@printf "  $(YELLOW)make export-linux$(RESET)    Pasta portatil Linux (roda em qualquer distro)\n"
+	@printf "  $(YELLOW)make instalar-deps-linux$(RESET) Instala dependencias Linux\n"
+	@printf "  $(YELLOW)make instalar-deps-win$(RESET)   Instala dependencias Windows\n"
+	@printf "  $(RED)make limpar$(RESET)             Remove artefatos\n\n"
+
+shaders: $(SHADERS_SPV) $(SHADERS_EMBED)
+	@printf "$(GREEN)+  Shaders SPIR-V atualizados.$(RESET)\n"
+
+$(SHADER_DIR)/%.vert.spv: $(SHADER_DIR)/%.vert
+	@printf "$(DIM)   GLSLC $<$(RESET)\n"
+	@$(GLSLC) -fshader-stage=vert $< -o $@ \
+		|| { printf "$(RED)x  Erro ao compilar shader $<$(RESET)\n"; exit 1; }
+
+$(SHADER_DIR)/%.frag.spv: $(SHADER_DIR)/%.frag
+	@printf "$(DIM)   GLSLC $<$(RESET)\n"
+	@$(GLSLC) -fshader-stage=frag $< -o $@ \
+		|| { printf "$(RED)x  Erro ao compilar shader $<$(RESET)\n"; exit 1; }
+
+$(SHADER_VERT_HDR): $(SHADER_VERT_SPV)
+	@printf "$(DIM)   XXD   $<$(RESET)\n"
+	@$(XXD) -i -n tupi2d_vert_spv $< > $@
+
+$(SHADER_FRAG_HDR): $(SHADER_FRAG_SPV)
+	@printf "$(DIM)   XXD   $<$(RESET)\n"
+	@$(XXD) -i -n tupi2d_frag_spv $< > $@
 
 instalar-deps-linux:
 ifeq ($(HOST_OS),Windows)
@@ -484,7 +587,7 @@ else ifeq ($(LINUX_PKG_MANAGER),apk)
 	fi
 else
 	@printf "\n$(RED)Nao foi possivel identificar o gerenciador de pacotes Linux.$(RESET)\n"
-	@printf "Instale manualmente: SDL2, Vulkan, shaderc, LuaJIT, Rust, Cargo e pkg-config.\n\n"
+	@printf "Instale manualmente: SDL2, Vulkan, shaderc, LuaJIT, libzip, Rust, Cargo e pkg-config.\n\n"
 endif
 
 instalar-deps-win:
@@ -508,9 +611,7 @@ else ifeq ($(WIN_INSTALLER),choco)
 	@printf "  > Instalar agora? [s/N]: " && read CONF; \
 	if [ "$$CONF" = "s" ] || [ "$$CONF" = "S" ]; then \
 		choco install -y rustup.install msys2 && \
-		printf "$(GREEN)+  Base do ambiente Windows instalada.$(RESET)\n" && \
-		printf "  Abra o terminal MSYS2 MINGW64 e rode:\n" && \
-		printf "  $(DIM)pacman -S --needed base-devel mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-vulkan-loader mingw-w64-x86_64-shaderc mingw-w64-x86_64-luajit rust cargo$(RESET)\n\n" \
+		printf "$(GREEN)+  Base do ambiente Windows instalada.$(RESET)\n" \
 		|| printf "$(RED)x  Falha ao instalar dependencias Windows.$(RESET)\n\n"; \
 	else \
 		printf "$(DIM)  Cancelado.$(RESET)\n\n"; \
@@ -520,17 +621,14 @@ else ifeq ($(WIN_INSTALLER),scoop)
 	@printf "  > Instalar agora? [s/N]: " && read CONF; \
 	if [ "$$CONF" = "s" ] || [ "$$CONF" = "S" ]; then \
 		scoop install rustup msys2 && \
-		printf "$(GREEN)+  Base do ambiente Windows instalada.$(RESET)\n" && \
-		printf "  Abra o terminal MSYS2 MINGW64 e rode:\n" && \
-		printf "  $(DIM)pacman -S --needed base-devel mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-vulkan-loader mingw-w64-x86_64-shaderc mingw-w64-x86_64-luajit rust cargo$(RESET)\n\n" \
+		printf "$(GREEN)+  Base do ambiente Windows instalada.$(RESET)\n" \
 		|| printf "$(RED)x  Falha ao instalar dependencias Windows.$(RESET)\n\n"; \
 	else \
 		printf "$(DIM)  Cancelado.$(RESET)\n\n"; \
 	fi
 else
-	@printf "  Nenhum instalador suportado foi encontrado.\n"
-	@printf "  Instale manualmente o Rustup e o MSYS2.\n"
-	@printf "  Depois, no terminal MSYS2 MINGW64, rode:\n"
+	@printf "  Nenhum instalador suportado encontrado.\n"
+	@printf "  Instale manualmente Rustup e MSYS2, depois no terminal MSYS2 MINGW64:\n"
 	@printf "  $(DIM)pacman -S --needed base-devel mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-vulkan-loader mingw-w64-x86_64-shaderc mingw-w64-x86_64-luajit rust cargo$(RESET)\n\n"
 endif
 else ifeq ($(LINUX_PKG_MANAGER),apt)
@@ -585,36 +683,3 @@ else
 	@printf "\n$(RED)Nao foi possivel identificar um fluxo suportado para instalar dependencias Windows.$(RESET)\n"
 	@printf "Instale manualmente um compilador MinGW-w64 e execute: rustup target add x86_64-pc-windows-gnu\n\n"
 endif
-
-ajuda:
-	@printf "\n$(CYAN)$(BOLD)  TupiEngine - comandos disponiveis:$(RESET)\n\n"
-	@printf "  $(GREEN)make$(RESET)                  Menu interativo\n"
-	@printf "  $(GREEN)make sdl2$(RESET)             Compila $(SDL2_LIB) (Linux)\n"
-	@printf "  $(CYAN)make win$(RESET)               Compila $(WIN_LIB) (Windows)\n"
-	@printf "  $(GREEN)make rodar$(RESET)            Compila e executa no Linux\n"
-	@printf "  $(YELLOW)make dist-linux$(RESET)      Gera binario standalone Linux com Lua embutido\n"
-	@printf "  $(YELLOW)make export-linux$(RESET)    Gera pasta portatil Linux (roda em qualquer distro)\n"
-	@printf "  $(YELLOW)make instalar-deps-linux$(RESET) Instala dependencias Linux\n"
-	@printf "  $(YELLOW)make instalar-deps-win$(RESET)   Instala dependencias Windows\n"
-	@printf "  $(RED)make limpar$(RESET)             Remove artefatos\n\n"
-
-shaders: $(SHADERS_SPV) $(SHADERS_EMBED)
-	@printf "$(GREEN)+  Shaders SPIR-V atualizados.$(RESET)\n"
-
-$(SHADER_DIR)/%.vert.spv: $(SHADER_DIR)/%.vert
-	@printf "$(DIM)   GLSLC $<$(RESET)\n"
-	@$(GLSLC) -fshader-stage=vert $< -o $@ \
-		|| { printf "$(RED)x  Erro ao compilar shader $<$(RESET)\n"; exit 1; }
-
-$(SHADER_DIR)/%.frag.spv: $(SHADER_DIR)/%.frag
-	@printf "$(DIM)   GLSLC $<$(RESET)\n"
-	@$(GLSLC) -fshader-stage=frag $< -o $@ \
-		|| { printf "$(RED)x  Erro ao compilar shader $<$(RESET)\n"; exit 1; }
-
-$(SHADER_VERT_HDR): $(SHADER_VERT_SPV)
-	@printf "$(DIM)   XXD   $<$(RESET)\n"
-	@$(XXD) -i -n tupi2d_vert_spv $< > $@
-
-$(SHADER_FRAG_HDR): $(SHADER_FRAG_SPV)
-	@printf "$(DIM)   XXD   $<$(RESET)\n"
-	@$(XXD) -i -n tupi2d_frag_spv $< > $@
